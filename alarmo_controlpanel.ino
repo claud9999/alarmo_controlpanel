@@ -8,7 +8,7 @@
 // replace with your wifi's ssid/password
 const char *ssid = "YOURSSID"; const char *password = "YOURWIFIPASSWORD";
 // replace with a URL pointing at a jpeg that is 1024x768
-const char img_url = "https://yoursite.com/img.jpg";
+const char *img_url = "https://yoursite.com/img.jpg";
 
 // replace with your MQTT host, port, username, key
 #define MQTT_HOST "YOURMQTT"
@@ -44,7 +44,7 @@ Adafruit_MQTT_Subscribe alarm_state = Adafruit_MQTT_Subscribe(&mqtt, "alarmo/sta
 Adafruit_MQTT_Publish alarmo_command = Adafruit_MQTT_Publish(&mqtt, "alarmo/command");
 
 uint32_t snooze = 0;
-bool show = false, repaint = false, sleeping = false;
+bool show = false, repaint = false, sleeping = false, frontlight = false, set_frontlight = false;
 uint8_t *img = NULL;
 int img_sz = E_INK_WIDTH * E_INK_HEIGHT * 4;
 
@@ -78,10 +78,10 @@ void setup() {
   Serial.println("loading image");
   img = display.downloadFile("http://www.hotcat.org/media/IMG_8018.jpeg", &img_sz);
 
-  repaint = false; show = true;
+  repaint = false; show = true; frontlight = false;
   snooze = display.rtcGetEpoch();
-  Serial.print("snooze...");
-  Serial.println(snooze);
+
+  display.frontlight(true);
 }
 
 void loop() {
@@ -103,7 +103,7 @@ void loop() {
   
         if(arm_state != prev_arm_state) {
           prev_arm_state = arm_state;
-          repaint = true; show = true;
+          repaint = true; show = true; set_frontlight = true;
         }
       }
     }
@@ -114,6 +114,7 @@ void loop() {
     if(display.tsAvailable()) {
       if(display.tsGetData(touchX, touchY)) {
         Serial.println("touch");
+        set_frontlight = true;
         if (!show) {
           show = true;
           repaint = true;
@@ -145,31 +146,41 @@ void loop() {
           } /* end switch */
         } /* end if show */
         snooze = display.rtcGetEpoch();
-      } else { /* not touch */
-        uint32_t current_time = display.rtcGetEpoch();
-        if(current_time > snooze + 100 && !sleeping) {
-          Serial.println("idle...");
-          show = false;
-          repaint = true;
-          sleeping = true;
-        } /* end if idlecount */
-        if(current_time > snooze + 200) {
-          Serial.println("deep sleep...");
-          esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
+      } /* end if tsGetData */
+    } /* end if tsAvaiable() */
+    uint32_t current_time = display.rtcGetEpoch();
+    if(current_time > snooze + 100 && !sleeping) {
+      Serial.println("idle...");
+      show = false;
+      repaint = true;
+      sleeping = true;
+      set_frontlight = false;
+    } /* end if snooze */
+    if(current_time > snooze + 200) {
+      Serial.println("deep sleep...");
+      display.setFrontlight(0);
+      display.frontlight(false);
+      esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
 /*          display.setIntOutput(1, false, false, HIGH);
-          display.setIntPin(PAD1, RISING);
-          display.setIntPin(PAD2, RISING);
-          display.setIntPin(PAD3, RISING);
-          esp_sleep_enable_ext1_wakeup(int64_t(1) << GPIO_NUM_34, ESP_EXT1_WAKEUP_ANY_HIGH);*/
-          display.tsShutdown();
-          display.einkOff();
-          mqtt.disconnect();
-          WiFi.disconnect();
-          esp_deep_sleep_start();
-        }
-      } /* end if touch */
-    } /* end if tsavailable */
+      display.setIntPin(PAD1, RISING);
+      display.setIntPin(PAD2, RISING);
+      display.setIntPin(PAD3, RISING);
+      esp_sleep_enable_ext1_wakeup(int64_t(1) << GPIO_NUM_34, ESP_EXT1_WAKEUP_ANY_HIGH);*/
+      display.tsShutdown();
+      display.einkOff();
+      mqtt.disconnect();
+      WiFi.disconnect();
+      esp_deep_sleep_start();
+    } /* end if deep sleep */
   } /* end if mqtt connected */
+
+  if(set_frontlight && !frontlight) {
+    display.setFrontlight(255);
+    frontlight = true;
+  } else if(!set_frontlight && frontlight) {
+    display.setFrontlight(0);
+    frontlight = false;
+  }
 
   if(repaint) {
     Serial.println("drawing image");
