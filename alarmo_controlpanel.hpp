@@ -15,6 +15,7 @@ class Button {
     Rect rect;
     void Paint(void);
     void Layout(Rect &bounds);
+    void Press(void);
 };
 
 typedef enum { Alarm_Unknown, Alarm_Arming, Alarm_Armed, Alarm_Home, Alarm_Disarmed } AlarmState;

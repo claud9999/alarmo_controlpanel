@@ -38,6 +38,11 @@ void Button::Paint(void) {
   display.print(this->text);
 }
 
+void Button::Press(void) {
+  display.fillRect(this->rect.x, this->rect.y, this->rect.width, this->rect.height, 1);
+  display.partialUpdate();
+}
+
 Button arm_button, arm_home_button, cancel_button, disarm_button;
 
 WiFiClient client;
@@ -53,6 +58,16 @@ int img_sz = E_INK_WIDTH * E_INK_HEIGHT * 4;
 
 AlarmState arm_state = Alarm_Unknown, prev_arm_state = Alarm_Unknown;
 
+void print(char *message) {
+  display.print(message);
+  Serial.print(message);
+}
+
+void println(char *message) {
+  display.println(message);
+  Serial.println(message);
+}
+
 void setup() {
   arm_button.text = "ARM"; arm_button.font_sz = 8; arm_button.rect.x = 0; arm_button.rect.y = 0; arm_button.rect.width = 500; arm_button.rect.height = 500;
   arm_home_button.text = "HOME"; arm_home_button.font_sz = 8; arm_home_button.rect.x = 520; arm_home_button.rect.y = 0; arm_home_button.rect.width = 500; arm_home_button.rect.height = 500;
@@ -61,30 +76,37 @@ void setup() {
 
   Serial.begin(115200);
   display.begin();
+  display.clearDisplay();
+  display.setCursor(0, 100);
+  display.setTextSize(3);
+  println("starting..."); display.display();
 
   if(!display.tsInit(true)) { // init touchscreen
-    Serial.println("Unable to init touchscreen...");
+    println("unable to init touchscreen,");
+    println("power cycle to try again.");
+    display.display();
     while(true);
   }
 
-  Serial.print("Connecting to WiFi");
+  print("Connecting to WiFi"); display.partialUpdate();
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    print("."); display.partialUpdate();
   }
-  Serial.println("connected");
+  println("connected!"); display.partialUpdate();
 
-  Serial.println("subscribing to MQTT topic");
+  println("subscribing to MQTT topic"); display.partialUpdate();
   mqtt.subscribe(&alarm_state);
 
-  Serial.println("loading image");
+  println("loading image"); display.partialUpdate();
   img = display.downloadFile("http://www.hotcat.org/media/IMG_8018.jpeg", &img_sz);
 
   repaint = false; show = true; frontlight = false;
   snooze = display.rtcGetEpoch();
 
   display.frontlight(true);
+  println("setup done"); display.partialUpdate();
 }
 
 void loop() {
@@ -106,11 +128,12 @@ void loop() {
   
         if(arm_state != prev_arm_state) {
           prev_arm_state = arm_state;
+          snooze = display.rtcGetEpoch();
           repaint = true; show = true; set_frontlight = true;
         }
       }
     }
-  
+
     uint16_t touchX[2], touchY[2];
     uint8_t touchCount = 0;
     
@@ -128,22 +151,26 @@ void loop() {
             case Alarm_Armed:
             case Alarm_Home:
               if (disarm_button.rect.Inside(touchX[0], touchY[0])) {
+                disarm_button.Press();
                 Serial.println("...disarm");
                 alarmo_command.publish("DISARM");
               }
               break;
             case Alarm_Disarmed:
               if (arm_button.rect.Inside(touchX[0], touchY[0])) {
+                arm_button.Press();
                 Serial.println("...arm");
                 alarmo_command.publish("ARM_AWAY");
               }
               if (arm_home_button.rect.Inside(touchX[0], touchY[0])) {
+                arm_home_button.Press();
                 Serial.println("...arm home");
                 alarmo_command.publish("ARM_HOME");
               }
               break;
             case Alarm_Arming:
               if (cancel_button.rect.Inside(touchX[0], touchY[0])) {
+                cancel_button.Press();
                 Serial.println("...cancel");
                 alarmo_command.publish("DISARM");
               }
