@@ -36,6 +36,4 @@ Inkplate.
 
 * Rotating images
 * Portrait orientation
-* Wake from deep sleep on touchscreen touch
 * Battery management
-* Better handling of touchscreen initialization

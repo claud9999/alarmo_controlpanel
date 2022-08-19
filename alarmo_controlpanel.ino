@@ -16,6 +16,9 @@ const char *img_url = "https://yoursite.com/img.jpg";
 #define MQTT_USERNAME ""
 #define MQTT_KEY ""
 
+#define IDLE_DELAY 120 // 2 minutes
+#define DEEPSLEEP_DELAY 300 // 5 minutes
+
 Inkplate display(INKPLATE_1BIT);
 
 void Rect::Paint(int border_sz) {
@@ -114,6 +117,8 @@ void loop() {
     if(display.tsAvailable()) {
       if(display.tsGetData(touchX, touchY)) {
         Serial.println("touch");
+        snooze = display.rtcGetEpoch();
+        sleeping = false;
         set_frontlight = true;
         if (!show) {
           show = true;
@@ -145,29 +150,35 @@ void loop() {
               break;
           } /* end switch */
         } /* end if show */
-        snooze = display.rtcGetEpoch();
       } /* end if tsGetData */
     } /* end if tsAvaiable() */
     uint32_t current_time = display.rtcGetEpoch();
-    if(current_time > snooze + 100 && !sleeping) {
+    if(current_time > snooze + IDLE_DELAY && !sleeping) {
       Serial.println("idle...");
       show = false;
       repaint = true;
       sleeping = true;
       set_frontlight = false;
     } /* end if snooze */
-    if(current_time > snooze + 200) {
+    if(current_time > snooze + DEEPSLEEP_DELAY) {
       Serial.println("deep sleep...");
       display.setFrontlight(0);
       display.frontlight(false);
+      
+        // Setup mcp interrupts
+    display.setIntOutput(1, false, false, HIGH);
+    display.setIntPin(PAD1, RISING);
+    display.setIntPin(PAD2, RISING);
+    display.setIntPin(PAD3, RISING);
+
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
 /*          display.setIntOutput(1, false, false, HIGH);
       display.setIntPin(PAD1, RISING);
       display.setIntPin(PAD2, RISING);
       display.setIntPin(PAD3, RISING);
       esp_sleep_enable_ext1_wakeup(int64_t(1) << GPIO_NUM_34, ESP_EXT1_WAKEUP_ANY_HIGH);*/
-      display.tsShutdown();
-      display.einkOff();
+      //display.tsShutdown();
+      //display.einkOff();
       mqtt.disconnect();
       WiFi.disconnect();
       esp_deep_sleep_start();
