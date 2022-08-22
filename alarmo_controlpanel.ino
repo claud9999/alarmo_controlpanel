@@ -50,8 +50,10 @@ WiFiClient client;
 Adafruit_MQTT_Client mqtt(&client, MQTT_HOST, MQTT_PORT, MQTT_USERNAME, MQTT_KEY);
 Adafruit_MQTT_Subscribe alarm_state = Adafruit_MQTT_Subscribe(&mqtt, "alarmo/state");
 Adafruit_MQTT_Publish alarmo_command = Adafruit_MQTT_Publish(&mqtt, "alarmo/command");
+Adafruit_MQTT_Publish mqtt_state_volt = Adafruit_MQTT_Publish(&mqtt, "inkplate/state/volt");
+Adafruit_MQTT_Publish mqtt_state_temp = Adafruit_MQTT_Publish(&mqtt, "inkplate/state/temp");
 
-uint32_t snooze = 0;
+uint32_t snooze = 0, last_mqtt_status = 0;
 bool show = false, repaint = false, sleeping = false, frontlight = false, set_frontlight = false;
 uint8_t *img = NULL;
 int img_sz = E_INK_WIDTH * E_INK_HEIGHT * 4;
@@ -110,8 +112,14 @@ void setup() {
 }
 
 void loop() {
+  uint32_t now = display.rtcGetEpoch();
   if (!mqtt.connected()) mqtt.connect();
   else {
+    if (last_mqtt_status + 300 < now) {
+      mqtt_state_volt.publish(display.readBattery());
+      mqtt_state_temp.publish(display.readTemperature());
+      last_mqtt_status = now;
+    }
     Adafruit_MQTT_Subscribe *subscription;
     while(subscription = mqtt.readSubscription(10)) {
       Serial.println("mqtt");
@@ -128,7 +136,7 @@ void loop() {
   
         if(arm_state != prev_arm_state) {
           prev_arm_state = arm_state;
-          snooze = display.rtcGetEpoch();
+          snooze = now;
           repaint = true; show = true; set_frontlight = true;
         }
       }
@@ -140,7 +148,7 @@ void loop() {
     if(display.tsAvailable()) {
       if(display.tsGetData(touchX, touchY)) {
         Serial.println("touch");
-        snooze = display.rtcGetEpoch();
+        snooze = now;
         sleeping = false;
         set_frontlight = true;
         if (!show) {
@@ -179,15 +187,14 @@ void loop() {
         } /* end if show */
       } /* end if tsGetData */
     } /* end if tsAvaiable() */
-    uint32_t current_time = display.rtcGetEpoch();
-    if(current_time > snooze + IDLE_DELAY && !sleeping) {
+    if(now > snooze + IDLE_DELAY && !sleeping) {
       Serial.println("idle...");
       show = false;
       repaint = true;
       sleeping = true;
       set_frontlight = false;
     } /* end if snooze */
-    if(current_time > snooze + DEEPSLEEP_DELAY) {
+    if(now > snooze + DEEPSLEEP_DELAY) {
       Serial.println("deep sleep...");
       display.setFrontlight(0);
       display.frontlight(false);

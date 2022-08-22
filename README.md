@@ -36,6 +36,5 @@ Inkplate.
 
 * Pick random image from folder
 * Portrait orientation
-* Battery management
 * make display into a clock/ rtc and ntp?
 * Wifi network selection?
