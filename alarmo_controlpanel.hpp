@@ -1,5 +1,5 @@
-#ifndef securyt_hpp
-#define securyt_hpp
+#ifndef alarmo_controlpanel_hpp
+#define alarmo_controlpanel_hpp
 
 class Rect {
   public:
@@ -20,4 +20,4 @@ class Button {
 
 typedef enum { Alarm_Unknown, Alarm_Arming, Alarm_Armed, Alarm_Home, Alarm_Disarmed } AlarmState;
 
-#endif
+#endif /* alarmo_controlpanel_hpp */

@@ -1,23 +1,10 @@
 #include "Inkplate.h"
 #include "alarmo_controlpanel.hpp"
+#include "alarmo_cpsettings.hpp" /* put your wifi ssid, mqtt, etc. here */
 
 #include "WiFi.h"
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
-
-// replace with your wifi's ssid/password
-const char *ssid = "YOURSSID"; const char *password = "YOURWIFIPASSWORD";
-// replace with a URL pointing at a jpeg that is 1024x768
-const char *img_url = "https://yoursite.com/img.jpg";
-
-// replace with your MQTT host, port, username, key
-#define MQTT_HOST "YOURMQTT"
-#define MQTT_PORT 1883
-#define MQTT_USERNAME ""
-#define MQTT_KEY ""
-
-#define IDLE_DELAY 120 // 2 minutes
-#define DEEPSLEEP_DELAY 300 // 5 minutes
 
 Inkplate display(INKPLATE_1BIT);
 
@@ -53,7 +40,7 @@ Adafruit_MQTT_Publish alarmo_command = Adafruit_MQTT_Publish(&mqtt, "alarmo/comm
 Adafruit_MQTT_Publish mqtt_state_volt = Adafruit_MQTT_Publish(&mqtt, "inkplate/state/volt");
 Adafruit_MQTT_Publish mqtt_state_temp = Adafruit_MQTT_Publish(&mqtt, "inkplate/state/temp");
 
-uint32_t snooze = 0, last_mqtt_status = 0;
+uint32_t last_update = 0, last_mqtt_status = 0;
 bool show = false, repaint = false, sleeping = false, frontlight = false, set_frontlight = false;
 uint8_t *img = NULL;
 int img_sz = E_INK_WIDTH * E_INK_HEIGHT * 4;
@@ -69,6 +56,8 @@ void println(char *message) {
   display.println(message);
   Serial.println(message);
 }
+
+void (*resetFn)(void) = 0;
 
 void setup() {
   arm_button.text = "ARM"; arm_button.font_sz = 8; arm_button.rect.x = 0; arm_button.rect.y = 0; arm_button.rect.width = 500; arm_button.rect.height = 500;
@@ -87,7 +76,9 @@ void setup() {
     println("unable to init touchscreen,");
     println("power cycle to try again.");
     display.display();
-    while(true);
+    while(1) delay(500000);
+//    delay(5000); // one second
+//    resetFn();
   }
 
   print("Connecting to WiFi"); display.partialUpdate();
@@ -105,7 +96,7 @@ void setup() {
   img = display.downloadFile("http://www.hotcat.org/media/IMG_8018.jpeg", &img_sz);
 
   repaint = false; show = true; frontlight = false;
-  snooze = display.rtcGetEpoch();
+  last_update = display.rtcGetEpoch();
 
   display.frontlight(true);
   println("setup done"); display.partialUpdate();
@@ -136,7 +127,7 @@ void loop() {
   
         if(arm_state != prev_arm_state) {
           prev_arm_state = arm_state;
-          snooze = now;
+          last_update = now;
           repaint = true; show = true; set_frontlight = true;
         }
       }
@@ -148,7 +139,7 @@ void loop() {
     if(display.tsAvailable()) {
       if(display.tsGetData(touchX, touchY)) {
         Serial.println("touch");
-        snooze = now;
+        last_update = now;
         sleeping = false;
         set_frontlight = true;
         if (!show) {
@@ -187,32 +178,25 @@ void loop() {
         } /* end if show */
       } /* end if tsGetData */
     } /* end if tsAvaiable() */
-    if(now > snooze + IDLE_DELAY && !sleeping) {
+    if(now > last_update + IDLE_DELAY && !sleeping) {
       Serial.println("idle...");
       show = false;
       repaint = true;
       sleeping = true;
       set_frontlight = false;
-    } /* end if snooze */
-    if(now > snooze + DEEPSLEEP_DELAY) {
+    } /* end if last_update */
+    if(now > last_update + DEEPSLEEP_DELAY) {
       Serial.println("deep sleep...");
       display.setFrontlight(0);
       display.frontlight(false);
       
-        // Setup mcp interrupts
-    display.setIntOutput(1, false, false, HIGH);
-    display.setIntPin(PAD1, RISING);
-    display.setIntPin(PAD2, RISING);
-    display.setIntPin(PAD3, RISING);
-
-      esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
-/*          display.setIntOutput(1, false, false, HIGH);
+      // Setup mcp interrupts
+      display.setIntOutput(1, false, false, HIGH);
       display.setIntPin(PAD1, RISING);
       display.setIntPin(PAD2, RISING);
       display.setIntPin(PAD3, RISING);
-      esp_sleep_enable_ext1_wakeup(int64_t(1) << GPIO_NUM_34, ESP_EXT1_WAKEUP_ANY_HIGH);*/
-      //display.tsShutdown();
-      //display.einkOff();
+
+      esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
       mqtt.disconnect();
       WiFi.disconnect();
       esp_deep_sleep_start();
